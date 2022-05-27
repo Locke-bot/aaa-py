@@ -13,7 +13,7 @@ build_local: build/main.py
 	cd build && pipenv run python main.py --local
 
 build_single: build/main.py
-	cd build && pipenv run python main.py --single $(file)
+	cd build && pipenv run python main.py --single $(MAKE)
 
 serve:
 	cd build/website && pipenv run python -m http.server 8080
@@ -22,7 +22,6 @@ sentinel:
 	${MAKE} -j4 serve watch
 
 main: | install build serve
-
 
 local: | build_local serve
 

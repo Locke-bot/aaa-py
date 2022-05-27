@@ -18,7 +18,7 @@ class PathList(collections.abc.MutableSequence):
     def __init__(self, *args):
         self._table = {}
         self.list = list()
-        # after 3 seconds of inactivity, render edits on the folder
+        # after 3 seconds of inactivity, modification should be done, render folder.
         self.timeout = 3
         self.extend(list(args))
 
@@ -96,12 +96,13 @@ def render_single():
         time.sleep(1)
         for key, value in path_list._table.copy().items():
             if time.time() > value:
+                # remove folder from list
                 del path_list._table[key]
                 path_list.remove(key)
+                # start a render thread, which will be killed on completion.
                 render_thread = Thread(target=render, args=(Path(key).parts[0],))
                 render_thread.daemon = True
                 render_thread.start()
-                print(f"{key} done copying,", threading.active_count())
 
 if __name__ == "__main__":
     src_path = Path('contents/contents')
@@ -110,13 +111,15 @@ if __name__ == "__main__":
     observer.schedule(event_handler, path=src_path, recursive=True)
     render_single_thread = Thread(target=render_single)
     render_single_thread.daemon = True
+
     print(f"Monitoring started on {src_path}")
     observer.start()
     render_single_thread.start()
     
     try:
         while(True):
-           time.sleep(0.5)       
+            # check for changes in the monitored folder and subfolders
+           time.sleep(0.5)     
     except KeyboardInterrupt:
             observer.stop()
             observer.join()
