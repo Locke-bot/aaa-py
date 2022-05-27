@@ -37,7 +37,7 @@ def importize(code, path, theme='default'):
                 start, end = -1, math.inf
             rest = "</a>".join(rest.split("</a>")[1:])
             res = ''
-            with open(os.path.join(path, lnk)) as file:
+            with open(os.path.join(path, lnk), encoding='utf-8') as file:
                 for i, line in enumerate(file):
                     if i >= start - 1 and i <= end - 1:
                         res += line

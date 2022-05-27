@@ -1,18 +1,28 @@
 default: main
 
+watch:
+	cd build && pipenv run python src/watch/monitor.py
+
 install:
 	cd build && pipenv install
 
 build: build/main.py
-	cd build && pipenv run python3 main.py
+	cd build && pipenv run python main.py
 
 build_local: build/main.py
-	cd build && pipenv run python3 main.py --local
+	cd build && pipenv run python main.py --local
+
+build_single: build/main.py
+	cd build && pipenv run python main.py --single $(file)
 
 serve:
-	cd build/website && pipenv run python3 -m http.server 8080
+	cd build/website && pipenv run python -m http.server 8080
+
+sentinel:
+	${MAKE} -j4 serve watch
 
 main: | install build serve
+
 
 local: | build_local serve
 

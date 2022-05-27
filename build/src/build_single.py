@@ -1,7 +1,16 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon May 23 12:45:39 2022
+
+@author: Unrated
+"""
+
 from .pull import pull
 from config import *
 from ext import get_ext
 
+import pygit2
+import watchdog
 from collections import namedtuple
 from contextlib import suppress
 from pathlib import Path
@@ -10,51 +19,27 @@ import json
 import markdown
 import os
 import pybtex.database
-import pygit2
 import re
 import shlex
 import shutil
 
-
-def build(local=False):
+def build_single(single_chapter):
     md = markdown.Markdown(extensions=EXT)
-    print("Detecting if contents present...")
-    do_clone = not AAA_CLONE_PATH.exists()
-    if do_clone and not local:
-        print("No contents present, cloning...")
-        pygit2.clone_repository(AAA_ORIGIN, str(AAA_CLONE_PATH))
-    elif do_clone and local:
-        raise FileNotFoundError('Contents must be present to build them in local mode')
-    elif not local:
-        print("Contents already exists.")
-        print("Updating...")
-        pull(pygit2.Repository(str(AAA_CLONE_PATH)))
-    else:
-        print('Found contents.')
-        
-    try:
-        print("Trying to create _book directory...")
-        O_NAME.mkdir()
-        print("Successfully created.")
-    except FileExistsError:
-        print("_book already exists. Removing...")
-        shutil.rmtree(O_NAME)
-        print("Making _book...")
-        O_NAME.mkdir()
 
     print("Making contents folder...")
-    (O_NAME/CONTENTS_NAME).mkdir()
+    with suppress(FileExistsError):
+        (O_NAME/CONTENTS_NAME).mkdir()
 
     print("Copying res folder...")
-    with suppress(FileNotFoundError):
+    with suppress(FileNotFoundError, FileExistsError):
         shutil.copytree(AAA_CLONE_PATH/"res", O_NAME/"res")
 
-    with suppress(FileNotFoundError):
+    with suppress(FileNotFoundError, FileExistsError):
         shutil.copytree(AAA_CLONE_PATH/CONTENTS_NAME/"cc", O_NAME/CONTENTS_NAME/"cc")
 
-    print("Done making, looking for chapters...")
-    chapter_mds = (AAA_CLONE_PATH / CONTENTS_NAME).glob('**/*.md')
-    chapters = map(lambda p: p.parent.relative_to(AAA_CLONE_PATH/CONTENTS_NAME), chapter_mds)
+    print("Done making, looking for the chapter...")
+    chapter_md = next((AAA_CLONE_PATH / CONTENTS_NAME / single_chapter).glob('*.md'))
+    chapter = chapter_md.parent.relative_to(AAA_CLONE_PATH/CONTENTS_NAME)
 
     print("Looking for the template...")
 
@@ -79,18 +64,21 @@ def build(local=False):
     renderer = get_ext(bib_database, PYGMENT_THEME, md)
 
     print("Rendering chapters...")
-    for chapter in chapters:
-        render_chapter(chapter, renderer, template, summary, book_json)
+    render_chapter(chapter, renderer, template, summary, book_json)
 
+    # only applicable if there was no initial algorithm-archive clone
     print("Moving favicon.ico...")
-    shutil.copy(FAVICON_PATH, O_NAME / "favicon.ico")
+    with suppress(FileNotFoundError, FileExistsError):
+        shutil.copy(FAVICON_PATH, O_NAME / "favicon.ico")
 
     print("Moving styles...")
-    shutil.copytree(STYLE_PATH, O_NAME / "styles")
+    with suppress(FileNotFoundError, FileExistsError):
+        shutil.copytree(STYLE_PATH, O_NAME / "styles")
 
     print("Parsing redirects...")
     with open(AAA_PATH / "redirects.json") as rjs_file:
         rjs = json.load(rjs_file)
+
     rjs = {i["from"]: i["to"] for i in rjs["redirects"]}
     with open(f"{O_NAME}/redirects.json", 'w') as rjs_file:
         json.dump(rjs, rjs_file)
@@ -119,29 +107,22 @@ def parse_summary(summary):
         summary_parsed.append(SummaryEntry(name, link, current_indent))
     return summary_parsed
 
-
 def render_chapter(chapter, renderer, template, summary, book_json):
-    try:
+    with suppress(FileExistsError):
         (O_NAME/CONTENTS_NAME/chapter).mkdir()
-    except:
-        pass
-    with suppress(FileNotFoundError):
+
+    with suppress(FileNotFoundError, FileExistsError):
         # dirty hack but it works
         shutil.copyfile(AAA_CLONE_PATH/CONTENTS_NAME/"cc"/"CC-BY-SA_icon.svg",
                         O_NAME/CONTENTS_NAME/chapter/"CC-BY-SA_icon.svg")
-    try:
-        with suppress(FileNotFoundError):
-            shutil.copytree(AAA_CLONE_PATH/CONTENTS_NAME/chapter/"res",
+
+    with suppress(FileNotFoundError, FileExistsError):
+        shutil.copytree(AAA_CLONE_PATH/CONTENTS_NAME/chapter/"res",
                 O_NAME/CONTENTS_NAME/chapter/"res")
-    except:
-        pass
     
-    try:
-        with suppress(FileNotFoundError):
-            shutil.copytree(AAA_CLONE_PATH/CONTENTS_NAME/chapter/"code",
+    with suppress(FileNotFoundError, FileExistsError):
+        shutil.copytree(AAA_CLONE_PATH/CONTENTS_NAME/chapter/"code",
                 O_NAME/CONTENTS_NAME/chapter/"code")
-    except:
-        pass
     try:
         md_file: str = next((CONTENTS_NAME/CONTENTS_NAME/chapter).glob('*.md'))
     except StopIteration:
@@ -156,7 +137,6 @@ def render_chapter(chapter, renderer, template, summary, book_json):
     contents: str = render_one(md_file.read_text(), f"{CONTENTS_NAME}/{CONTENTS_NAME}/{chapter}",
                                index, renderer, template, summary, book_json)
     out_file.write_text(contents, encoding='utf-8')
-
 
 def render_one(text, code_dir, index, renderer, template, summary, book_json) -> str:
     finalized = renderer(text, code_dir)
